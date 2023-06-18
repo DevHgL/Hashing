@@ -1,193 +1,154 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 
-typedef struct {
-    int matricula;
-    char nome[50];
-    char curso[50];
+typedef struct aluno {
+  int matricula;
+  char nome[50];
+  char email[100];
+  int disponibilidade;
 } Aluno;
 
-void inicializarTabela(Aluno tabela[], int tamanho) {
-    int i;
-    for (i = 0; i < tamanho; i++) {
-        tabela[i].matricula = -1; // -1 indica posição vazia
-    }
+int tamanho = 0;
+
+void inicializar(char *nomeArq){
+  FILE *arq = fopen(nomeArq, "wb");
+  if(arq == NULL){
+    printf("ERROR: Erro ao abrir o arquivo.\n");
+    return;
+  }
+  Aluno a;
+  a.disponibilidade = 1;
+  for(int i = 0; i < tamanho; i++)
+    fwrite(&a, sizeof(Aluno), 1, arq);
+  fclose(arq);
 }
 
-int calcularHash(int matricula, int tamanho) {
-    return matricula % tamanho;
+int hash(int matricula){
+  return matricula % tamanho;
 }
 
-int proximaPosicaoLivre(int posicao, int tamanho) {
-    return (posicao + 1) % tamanho;
+int acharPosicao(char *nomeArq, int matricula){
+  FILE *arq = fopen(nomeArq, "rb");
+  Aluno a;
+  int pos = hash(matricula);
+  fseek(arq, pos*sizeof(Aluno), SEEK_SET);
+  fread(&a, sizeof(Aluno), 1, arq);
+  while(a.disponibilidade == 0 && a.matricula != matricula){
+    pos = (pos + 1) % tamanho; //tratamento de colisao
+    fseek(arq, pos*sizeof(Aluno), SEEK_SET);
+    fread(&a, sizeof(Aluno), 1, arq);
+  }
+  fclose(arq);
+  return pos;
 }
 
-void inserirAluno(Aluno tabela[], int tamanho) {
-    FILE *arquivo;
-    Aluno aluno;
-    int matricula, posicao, i;
+void inserirAluno(char *nomeArq, Aluno a){
+  FILE *arq = fopen(nomeArq, "r+b");
 
-    arquivo = fopen("alunos.bin", "ab");
-    if (arquivo == NULL) {
-        printf("Erro ao abrir o arquivo!\n");
-        return;
-    }
+  printf("Digite o nome do aluno: ");
+  scanf("%s", a.nome);
 
-    printf("Digite a matricula do aluno: ");
-    scanf("%d", &matricula);
+  printf("Digite o email do aluno: ");
+  scanf("%s", a.email);
 
-    // Verifica se a matrícula já existe na tabela
-    for (i = 0; i < tamanho; i++) {
-        if (tabela[i].matricula == matricula) {
-            printf("Matricula ja existente! Por favor, insira outra matricula.\n");
-            fclose(arquivo);
-            return;
-        }
-    }
+  printf("Digite a matricula do aluno: ");
+  scanf("%d", &a.matricula);
+  a.disponibilidade = 0;
 
-    printf("Digite o nome do aluno: ");
-    scanf(" %49[^\n]", aluno.nome);
+  int pos = acharPosicao(nomeArq, a.matricula);
 
-    printf("Digite o curso do aluno: ");
-    scanf(" %49[^\n]", aluno.curso);
+  fseek(arq, pos*sizeof(Aluno), SEEK_SET);
+  fwrite(&a, sizeof(Aluno), 1, arq);
+  fclose(arq);
+}
 
-    aluno.matricula = matricula;
+void imprimirAluno(char *nomeArq, int matricula){
+  FILE *arq = fopen(nomeArq,"r");
 
-    posicao = calcularHash(matricula, tamanho);
+  Aluno a;
+  int pos = acharPosicao(nomeArq, matricula);
 
-    if (tabela[posicao].matricula == -1) {
-        tabela[posicao] = aluno;
-        fwrite(&aluno, sizeof(Aluno), 1, arquivo);
-        printf("Aluno inserido com sucesso!\n");
+  fseek(arq, pos*sizeof(Aluno), SEEK_SET);
+  fread(&a, sizeof(Aluno), 1, arq);
+
+  if(a.disponibilidade == 0 && a.matricula == matricula){
+    printf("Aluno encontrado:\n");
+    printf("Matricula: %d\n", a.matricula);
+    printf("Nome: %s\n", a.nome);
+    printf("Email: %s\n", a.email);
+  } else {
+    printf("Aluno nao encontrado.\n");
+  }
+
+  fclose(arq);
+}
+
+void imprimirTabela(char *nomeArq) {
+  FILE *arq = fopen(nomeArq, "rb");
+
+  Aluno a;
+
+  printf("Tabela de dispersao:\n");
+
+  for(int i = 0; i < tamanho; i++) {
+    fseek(arq, i*sizeof(Aluno), SEEK_SET);
+    fread(&a, sizeof(Aluno), 1, arq);
+
+    printf("Posicao %d:", i);
+
+    if(a.disponibilidade == 0) {
+      printf(" Matricula: %d, Nome: %s, Email: %s\n", a.matricula, a.nome, a.email);
     } else {
-        // Tratamento de colisão: próxima posição livre
-        i = proximaPosicaoLivre(posicao, tamanho);
-        while (i != posicao && tabela[i].matricula != -1) {
-            i = proximaPosicaoLivre(i, tamanho);
-        }
-        if (i == posicao) {
-            printf("Erro: tabela hash cheia!\n");
-        } else {
-            tabela[i] = aluno;
-            fwrite(&aluno, sizeof(Aluno), 1, arquivo);
-            printf("Aluno inserido com sucesso!\n");
-        }
+      printf(" Vazio\n");
     }
+  }
 
-    fclose(arquivo);
+  fclose(arq);
 }
 
-void imprimirAluno(Aluno tabela[], int tamanho) {
-    FILE *arquivo;
-    Aluno aluno;
-    int matricula, posicao;
+int main(void){
+  Aluno a;
+  char nomeArquivo[50];
+  int opcao;
+  int matricula;
 
-    arquivo = fopen("alunos.bin", "rb");
-    if (arquivo == NULL) {
-        printf("Erro ao abrir o arquivo!\n");
-        return;
+  printf("Digite o tamanho da tabela: ");
+  scanf("%d", &tamanho);
+
+  printf("Digite o nome do arquivo a ser lido: ");
+  scanf("%s", nomeArquivo);
+
+  inicializar(nomeArquivo);
+
+  do {
+    printf("\nMenu:\n");
+    printf("1. Inserir um novo aluno\n");
+    printf("2. Imprimir as informacoes de um determinado aluno\n");
+    printf("3. Imprimir a tabela de dispersao\n");
+    printf("4. Sair\n");
+    printf("Escolha uma opcao: ");
+    scanf("%d", &opcao);
+
+    switch(opcao){
+      case 1:
+        inserirAluno(nomeArquivo, a);
+        break;
+      case 2:
+        printf("Digite a matricula do aluno que deseja buscar: ");
+        scanf("%d", &matricula);
+        imprimirAluno(nomeArquivo, matricula);
+        break;
+      case 3:
+        imprimirTabela(nomeArquivo);
+        break;
+      case 4:
+        printf("Encerrando o programa...\n");
+        break;
+      default:
+        printf("Opcao invalida!\n");
     }
+  } while(opcao != 4);
 
-    printf("Digite a matricula do aluno: ");
-    scanf("%d", &matricula);
-
-    posicao = calcularHash(matricula, tamanho);
-
-    fseek(arquivo, posicao * sizeof(Aluno), SEEK_SET);
-    if (fread(&aluno, sizeof(Aluno), 1, arquivo) == 1) {
-        if (aluno.matricula == matricula) {
-            printf("Aluno encontrado:\n");
-            printf("Matricula: %d\n", aluno.matricula);
-            printf("Nome: %s\n", aluno.nome);
-            printf("Curso: %s\n", aluno.curso);
-            fclose(arquivo);
-            return;
-        } else {
-            // Verifica se o aluno está em alguma posição posterior devido à colisão
-            int i = proximaPosicaoLivre(posicao, tamanho);
-            while (i != posicao) {
-                fseek(arquivo, i * sizeof(Aluno), SEEK_SET);
-                if (fread(&aluno, sizeof(Aluno), 1, arquivo) == 1) {
-                    if (aluno.matricula == matricula) {
-                        printf("Aluno encontrado:\n");
-                        printf("Matricula: %d\n", aluno.matricula);
-                        printf("Nome: %s\n", aluno.nome);
-                        printf("Curso: %s\n", aluno.curso);
-                        fclose(arquivo);
-                        return;
-                    }
-                }
-                i = proximaPosicaoLivre(i, tamanho);
-            }
-        }
-    }
-
-    printf("Aluno nao encontrado!\n");
-    fclose(arquivo);
-}
-
-void imprimirTabela(Aluno tabela[], int tamanho) {
-    FILE *arquivo;
-    Aluno aluno;
-    int i;
-
-    arquivo = fopen("alunos.bin", "rb");
-    if (arquivo == NULL) {
-        printf("Erro ao abrir o arquivo!\n");
-        return;
-    }
-
-    printf("Tabela de dispersao:\n");
-    for (i = 0; i < tamanho; i++) {
-        fseek(arquivo, i * sizeof(Aluno), SEEK_SET);
-        if (fread(&aluno, sizeof(Aluno), 1, arquivo) == 1) {
-            printf("Posicao %d:\n", i);
-            if (aluno.matricula == -1) {
-                printf("Vazia\n");
-            } else {
-                printf("Matricula: %d\n", aluno.matricula);
-                printf("Nome: %s\n", aluno.nome);
-                printf("Curso: %s\n", aluno.curso);
-            }
-            printf("------------------\n");
-        }
-    }
-
-    fclose(arquivo);
-}
-
-int main() {
-    int opcao;
-    Aluno tabela[100];
-    inicializarTabela(tabela, 100);
-
-    do {
-        printf("\nMenu:\n");
-        printf("1. Inserir um novo aluno\n");
-        printf("2. Imprimir as informacoes de um determinado aluno\n");
-        printf("3. Imprimir a tabela de dispersao\n");
-        printf("4. Sair\n");
-        printf("Escolha uma opcao: ");
-        scanf("%d", &opcao);
-
-        switch (opcao) {
-            case 1:
-                inserirAluno(tabela, 100);
-                break;
-            case 2:
-                imprimirAluno(tabela, 100);
-                break;
-            case 3:
-                imprimirTabela(tabela, 100);
-                break;
-            case 4:
-                printf("Encerrando o programa...\n");
-                break;
-            default:
-                printf("Opcao invalida!\n");
-        }
-    } while (opcao != 4);
-
-    return 0;
+  return 0;
 }
